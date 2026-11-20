@@ -1,0 +1,886 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="description" content="A game for kids: play the AI and learn how language models pick the next word.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='6' r='4.5' fill='%23d2402f'/%3E%3Crect x='7' y='15' width='50' height='41' rx='13' fill='%232f5fb3'/%3E%3Crect x='14' y='23' width='36' height='20' rx='8' fill='white'/%3E%3Ccircle cx='25' cy='33' r='4' fill='%231f2a44'/%3E%3Ccircle cx='39' cy='33' r='4' fill='%231f2a44'/%3E%3C/svg%3E">
+<style>:root{color-scheme:light;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
+<title>I Am the AI</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;800&family=Lexend:wght@400;500;700&display=swap">
+<style>
+/* Layout: exercise-book page — a level map, then one screen at a time; play strip on top, the "what people said" library below as ruled lines. Blue = words the AI looks at, red = the next word, gold = most often / new data. */
+:root {
+  --paper: #f5f8f3;
+  --sheet: #ffffff;
+  --ink: #1f2a44;
+  --ink-soft: #5b6680;
+  --rule: #d6dfe8;
+  --grid: #e5ecf1;
+  --blue: #2f5fb3;
+  --blue-wash: #e3ecfa;
+  --red: #d2402f;
+  --red-wash: #fde6e1;
+  --gold: #b57a00;
+  --gold-wash: #fff0c7;
+  --green: #2e8a57;
+  --green-wash: #e1f4e8;
+  --font-display: "Baloo 2", "Trebuchet MS", system-ui, sans-serif;
+  --font-body: "Lexend", "Segoe UI", system-ui, sans-serif;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --paper: #131926; --sheet: #1b2333; --ink: #e8edf6; --ink-soft: #9ca8bf;
+  --rule: #2d3a52; --grid: #1f293a; --blue: #8fb3f5; --blue-wash: #22334f;
+  --red: #ff8b79; --red-wash: #4a2622; --gold: #f2c25a; --gold-wash: #42351a;
+  --green: #74d39c; --green-wash: #1c3a2a;
+  color-scheme: dark;
+} }
+:root[data-theme="dark"] {
+  --paper: #131926; --sheet: #1b2333; --ink: #e8edf6; --ink-soft: #9ca8bf;
+  --rule: #2d3a52; --grid: #1f293a; --blue: #8fb3f5; --blue-wash: #22334f;
+  --red: #ff8b79; --red-wash: #4a2622; --gold: #f2c25a; --gold-wash: #42351a;
+  --green: #74d39c; --green-wash: #1c3a2a;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--paper);
+  background-image: linear-gradient(var(--grid) 1px, transparent 1px), linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+  background-size: 28px 28px;
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 18px;
+  line-height: 1.55;
+}
+button { font-family: inherit; }
+button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
+.wrap {
+  max-width: 980px; margin: 0 auto;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 18px 48px;
+  display: flex; flex-direction: column; gap: 16px;
+}
+
+/* top bar */
+.top { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; justify-content: space-between; }
+.brand { font-family: var(--font-display); font-weight: 800; font-size: 24px; line-height: 1; display: flex; align-items: center; gap: 8px; }
+.brand svg { width: 32px; height: 32px; }
+.top-right { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.teacher { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--ink-soft); flex-wrap: wrap; }
+.teacher label { display: inline-flex; gap: 6px; align-items: center; cursor: pointer; }
+.teacher select { font: inherit; font-size: 14px; padding: 4px 6px; border-radius: 6px; border: 1px solid var(--rule); background: var(--sheet); color: var(--ink); max-width: 240px; }
+.crumb { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; font-size: 15px; color: var(--ink-soft); }
+.crumb b { color: var(--ink); }
+.dots { display: inline-flex; gap: 5px; }
+.dots i { width: 10px; height: 10px; border-radius: 50%; background: var(--rule); }
+.dots i.on { background: var(--blue); }
+.dots i.now { background: var(--red); transform: scale(1.25); }
+
+/* robot bubble */
+.bot { display: flex; gap: 12px; align-items: flex-start; }
+.bot > svg { width: 64px; height: 64px; flex: none; }
+.bubble { position: relative; background: var(--sheet); border: 2px solid var(--ink); border-radius: 18px; padding: 14px 52px 14px 18px; font-size: 19px; min-width: 0; flex: 1; box-shadow: 4px 4px 0 var(--rule); }
+.bubble b { color: var(--blue); }
+.bubble p { margin: 0; }
+.bubble p + p { margin-top: 6px; }
+.say { position: absolute; right: 10px; top: 10px; width: 34px; height: 34px; border-radius: 50%; border: 1px solid var(--rule); background: var(--paper); cursor: pointer; font-size: 16px; line-height: 1; }
+.say:hover { border-color: var(--ink-soft); }
+
+.panel { background: var(--sheet); border: 1px solid var(--rule); border-radius: 16px; padding: 18px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.eyebrow { font-size: 13px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-soft); margin: 0; }
+h1, h2, h3 { font-family: var(--font-display); font-weight: 800; margin: 0; line-height: 1.15; text-wrap: balance; }
+h1 { font-size: clamp(40px, 9vw, 68px); }
+h2 { font-size: clamp(26px, 5vw, 34px); }
+h3 { font-size: 20px; }
+
+.btn { font-size: 18px; font-weight: 700; padding: 12px 22px; border-radius: 12px; border: 2px solid var(--ink); background: var(--blue); color: var(--sheet); cursor: pointer; box-shadow: 3px 3px 0 var(--ink); }
+.btn:hover { transform: translate(-1px, -1px); box-shadow: 4px 4px 0 var(--ink); }
+.btn:active { transform: translate(2px, 2px); box-shadow: 1px 1px 0 var(--ink); }
+.btn:disabled { opacity: .4; cursor: default; transform: none; box-shadow: 3px 3px 0 var(--ink); }
+.btn.alt { background: var(--sheet); color: var(--ink); }
+.btn.small { font-size: 15px; padding: 8px 14px; }
+.btn.gold { background: var(--gold-wash); color: var(--ink); }
+.nav { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+.back { background: none; border: none; color: var(--ink-soft); font-size: 15px; cursor: pointer; padding: 6px 0; text-decoration: underline; text-underline-offset: 3px; }
+
+/* intro */
+.hero { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 14px; padding-block: 24px; }
+.hero svg { width: 140px; height: 140px; }
+.hero p { margin: 0; font-size: 21px; max-width: 34ch; }
+.rules { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+@media (max-width: 640px) { .rules { grid-template-columns: minmax(0, 1fr); } }
+.rules li { display: flex; gap: 12px; align-items: center; background: var(--sheet); border: 1px solid var(--rule); border-radius: 14px; padding: 14px; }
+.rules .k { font-family: var(--font-display); font-weight: 800; font-size: 26px; width: 44px; height: 44px; border-radius: 50%; background: var(--blue-wash); color: var(--blue); display: grid; place-items: center; flex: none; }
+.rules mark { background: var(--red-wash); color: var(--red); padding: 0 4px; border-radius: 4px; font-weight: 700; }
+
+/* level map */
+.cardcount { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.cardcount .slots { display: inline-flex; gap: 6px; }
+.cardcount .slots i { width: 26px; height: 34px; border-radius: 5px; border: 2px dashed var(--rule); }
+.cardcount .slots i.got { border: 2px solid var(--ink); background: var(--gold-wash); }
+.map { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 14px; position: relative; }
+.map::before { content: ""; position: absolute; left: 27px; top: 28px; bottom: 28px; border-left: 4px dotted var(--rule); }
+.lvl { position: relative; display: flex; align-items: center; gap: 14px; padding: 12px 14px 12px 0; }
+.lvl .badge { position: relative; z-index: 1; flex: none; width: 58px; height: 58px; border-radius: 50%; display: grid; place-items: center; font-family: var(--font-display); font-weight: 800; font-size: 26px; background: var(--sheet); border: 3px solid var(--rule); color: var(--ink-soft); }
+.lvl .info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; background: var(--sheet); border: 2px solid var(--rule); border-radius: 14px; padding: 12px 14px; }
+.lvl .info b { font-family: var(--font-display); font-size: 22px; line-height: 1.15; }
+.lvl .info .got { font-size: 14px; color: var(--gold); font-weight: 700; }
+.lvl .row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; }
+.lvl.done .badge { background: var(--green); border-color: var(--green); color: var(--sheet); }
+.lvl.next .badge { background: var(--blue); border-color: var(--ink); color: var(--sheet); animation: pulse 1.6s ease-in-out infinite; }
+.lvl.next .info { border-color: var(--blue); box-shadow: 4px 4px 0 var(--blue-wash); }
+.lvl.locked .info { opacity: .55; }
+
+/* play strip */
+.strip { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-height: 60px; }
+.tok { font-family: var(--font-display); font-weight: 800; font-size: 26px; line-height: 1; padding: 12px 14px; border-radius: 10px; background: var(--paper); border: 2px solid var(--rule); color: var(--ink); }
+.tok.ctx { background: var(--blue-wash); border-color: var(--blue); color: var(--blue); }
+.tok.pop { animation: pop .35s ease-out; }
+@keyframes pop { 0% { transform: scale(.6); } 70% { transform: scale(1.12); } 100% { transform: scale(1); } }
+.slot { font-family: var(--font-display); font-weight: 800; font-size: 26px; line-height: 1; min-width: 72px; padding: 12px 14px; border-radius: 10px; border: 3px dashed var(--red); color: var(--red); background: transparent; cursor: pointer; animation: pulse 1.6s ease-in-out infinite; }
+.slot.on { background: var(--red-wash); border-style: solid; animation: none; }
+.end { font-family: var(--font-display); font-size: 26px; color: var(--ink-soft); }
+@keyframes pulse { 50% { transform: scale(1.06); } }
+.hint { margin: 0; font-size: 17px; padding: 10px 14px; border-radius: 10px; background: var(--paper); }
+.hint b { color: var(--red); }
+.hint.good { background: var(--green-wash); }
+.hint.good b { color: var(--green); }
+.hint.try { background: var(--gold-wash); }
+.cands { display: flex; flex-wrap: wrap; gap: 10px; }
+.cand { font-size: 19px; font-weight: 500; padding: 9px 16px; border-radius: 999px; border: 2px solid var(--red); background: var(--sheet); color: var(--ink); cursor: pointer; display: inline-flex; align-items: center; gap: 8px; }
+.cand:hover { background: var(--red-wash); }
+.cand.no { border-color: var(--rule); color: var(--ink-soft); text-decoration: line-through; }
+.cand .n { font-size: 13px; font-weight: 700; color: var(--sheet); background: var(--red); border-radius: 999px; padding: 1px 8px; font-variant-numeric: tabular-nums; }
+.cand.top { border-color: var(--gold); box-shadow: 0 0 0 3px var(--gold-wash); }
+.cand.top .n { background: var(--gold); color: var(--sheet); }
+.result { display: flex; flex-direction: column; gap: 10px; align-items: flex-start; padding: 14px; border-radius: 12px; background: var(--green-wash); border: 2px solid var(--green); }
+.result .big { font-family: var(--font-display); font-weight: 800; font-size: clamp(24px, 5vw, 32px); line-height: 1.2; }
+
+/* library */
+.lib-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 8px; }
+.legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 13px; color: var(--ink-soft); }
+.legend i { display: inline-block; width: 14px; height: 14px; border-radius: 4px; vertical-align: -2px; margin-right: 4px; }
+.lg-prev { background: var(--blue-wash); border: 2px solid var(--blue); }
+.lg-next { background: var(--red-wash); border: 2px solid var(--red); }
+.lg-new { background: var(--gold-wash); border: 2px solid var(--gold); }
+.lib { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 28px; }
+@media (max-width: 720px) { .lib { grid-template-columns: minmax(0, 1fr); } }
+.lib li { display: flex; gap: 10px; align-items: baseline; padding: 5px 2px; border-bottom: 1px solid var(--rule); transition: opacity .2s; min-width: 0; }
+.lib .num { font-size: 12px; color: var(--ink-soft); width: 34px; text-align: right; flex: none; font-variant-numeric: tabular-nums; }
+.lib .words { display: flex; flex-wrap: wrap; gap: 4px; font-size: 17px; min-width: 0; }
+.w { padding: 0 5px; border-radius: 6px; border: 2px solid transparent; }
+.w.prev { background: var(--blue-wash); border-color: var(--blue); color: var(--blue); font-weight: 700; }
+.w.next { background: var(--red-wash); border-color: var(--red); color: var(--red); font-weight: 700; }
+.w.next.focus { box-shadow: 0 0 0 3px var(--gold); }
+.lib.filtering li.miss { opacity: .28; }
+.lib li.added { background: var(--gold-wash); border-bottom-color: var(--gold); border-radius: 6px; padding-inline: 4px; }
+.lib li.added .num { font-size: 11px; font-weight: 800; color: var(--sheet); background: var(--gold); border-radius: 999px; padding: 1px 0; text-align: center; letter-spacing: .04em; }
+.lib li.fresh { animation: drop .6s ease-out; }
+@keyframes drop { 0% { transform: translateY(-14px) scale(.96); opacity: 0; box-shadow: 0 0 0 0 var(--gold); } 60% { opacity: 1; box-shadow: 0 0 0 6px var(--gold-wash); } 100% { transform: none; box-shadow: 0 0 0 0 transparent; } }
+
+/* questions */
+.qnum { font-family: var(--font-display); font-weight: 800; color: var(--red); }
+.quote { font-family: var(--font-display); font-weight: 800; font-size: clamp(24px, 5vw, 32px); line-height: 1.2; padding: 14px 18px; border-left: 6px solid var(--blue); background: var(--blue-wash); border-radius: 0 12px 12px 0; }
+.opts { display: flex; flex-direction: column; gap: 10px; }
+.opt { text-align: left; font-size: 19px; padding: 14px 16px; border-radius: 12px; border: 2px solid var(--rule); background: var(--sheet); color: var(--ink); cursor: pointer; display: flex; gap: 12px; align-items: center; }
+.opt:hover:not(:disabled) { border-color: var(--blue); }
+.opt .letter { font-family: var(--font-display); font-weight: 800; width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; background: var(--paper); flex: none; }
+.opt.yes { border-color: var(--green); background: var(--green-wash); }
+.opt.yes .letter { background: var(--green); color: var(--sheet); }
+.opt.no { border-color: var(--red); background: var(--red-wash); }
+.opt:disabled { cursor: default; }
+.fb { margin: 0; padding: 12px 14px; border-radius: 10px; font-size: 18px; }
+.fb.good { background: var(--green-wash); border: 2px solid var(--green); }
+.fb.try { background: var(--gold-wash); border: 2px solid var(--gold); }
+.pieces { display: flex; flex-direction: column; gap: 8px; }
+.piece { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; font-size: 16px; animation: fadein .4s ease-out both; }
+.piece .pair { font-family: var(--font-display); font-weight: 800; font-size: 20px; padding: 4px 12px; border-radius: 8px; background: var(--blue-wash); color: var(--blue); }
+.piece .src { color: var(--ink-soft); }
+@keyframes fadein { from { opacity: .2; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
+/* fact card */
+.fact { align-self: center; width: min(100%, 420px); background: var(--gold-wash); border: 3px solid var(--ink); border-radius: 20px; padding: 26px 24px; display: flex; flex-direction: column; gap: 12px; box-shadow: 6px 6px 0 var(--ink); transform: rotate(-1.5deg); animation: deal .5s ease-out; }
+.fact .tag { font-size: 13px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--gold); }
+.fact .txt { font-family: var(--font-display); font-weight: 800; font-size: 30px; line-height: 1.15; }
+.fact svg { width: 48px; height: 48px; align-self: flex-end; }
+@keyframes deal { from { transform: rotate(-12deg) scale(.7); opacity: 0; } to { transform: rotate(-1.5deg) scale(1); opacity: 1; } }
+
+/* data change (round 2) */
+.datahead { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
+.datacount { display: flex; align-items: baseline; gap: 8px; }
+.datacount .big { font-family: var(--font-display); font-weight: 800; font-size: 44px; line-height: 1; font-variant-numeric: tabular-nums; }
+.datacount .big.grew { color: var(--gold); }
+.ex-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+[hidden] { display: none !important; }
+.score { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; }
+.chip { font-size: 16px; padding: 3px 12px; border-radius: 999px; border: 2px solid var(--red); background: var(--red-wash); color: var(--ink); font-variant-numeric: tabular-nums; }
+.chip b { color: var(--red); }
+.chip.newword { border-color: var(--gold); background: var(--gold-wash); }
+.chip.newword b { color: var(--gold); }
+.chip.top { box-shadow: 0 0 0 3px var(--gold-wash); font-weight: 700; }
+.bars { display: flex; flex-direction: column; gap: 6px; }
+.bar-row { display: grid; grid-template-columns: 70px minmax(0, 1fr) 34px; gap: 10px; align-items: center; font-size: 16px; }
+.bar-row .lbl { font-weight: 700; text-align: right; }
+.bar-track { background: var(--paper); border-radius: 6px; height: 22px; overflow: hidden; border: 1px solid var(--rule); }
+.bar-fill { height: 100%; background: var(--red); border-radius: 5px; transition: width .35s ease; }
+.bar-row.newword .bar-fill { background: var(--gold); }
+.bar-row.top .lbl::after { content: " 👑"; }
+.bar-row .cnt { font-variant-numeric: tabular-nums; font-weight: 700; }
+.compare { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
+.compare > div { padding: 16px; border-radius: 12px; display: flex; flex-direction: column; gap: 6px; }
+.compare .before { background: var(--green-wash); border: 2px solid var(--green); }
+.compare .after { background: var(--gold-wash); border: 2px solid var(--gold); }
+.compare > div .btn { align-self: flex-start; }
+.compare .big { font-family: var(--font-display); font-weight: 800; font-size: clamp(24px, 5vw, 32px); line-height: 1.2; }
+
+/* fill-in + open */
+.fill { font-family: var(--font-display); font-weight: 800; font-size: clamp(26px, 6vw, 38px); line-height: 1.3; }
+.blank { display: inline-block; min-width: 150px; border-bottom: 4px solid var(--red); text-align: center; color: var(--red); }
+.blank.ok { color: var(--green); border-color: var(--green); }
+textarea, input[type="text"] { width: 100%; font: inherit; font-size: 19px; padding: 14px; border-radius: 12px; border: 2px solid var(--rule); background: var(--paper); color: var(--ink); }
+textarea { min-height: 130px; resize: vertical; }
+.sample { padding: 16px; border-radius: 12px; background: var(--blue-wash); border: 2px solid var(--blue); }
+.sample p { margin: 0; }
+.checks { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.checks label { display: flex; gap: 10px; align-items: center; cursor: pointer; }
+.checks input { width: 22px; height: 22px; accent-color: var(--green); }
+
+/* certificate */
+.cert { border: 4px double var(--ink); border-radius: 20px; padding: 24px; background: var(--sheet); display: flex; flex-direction: column; gap: 16px; text-align: center; align-items: center; }
+.cert .name { font-family: var(--font-display); font-weight: 800; font-size: clamp(30px, 7vw, 46px); color: var(--blue); }
+.cert .name:empty { display: none; }
+.cards { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; width: 100%; }
+@media (max-width: 720px) { .cards { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.mini { background: var(--gold-wash); border: 2px solid var(--ink); border-radius: 12px; padding: 12px; text-align: left; font-family: var(--font-display); font-weight: 800; font-size: 17px; line-height: 1.2; }
+.mini span { display: block; font-family: var(--font-body); font-weight: 700; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--gold); margin-bottom: 4px; }
+.sents { width: 100%; display: flex; flex-direction: column; gap: 8px; text-align: left; }
+.sents div { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: baseline; padding: 8px 12px; border-radius: 10px; background: var(--paper); }
+.sents b { font-family: var(--font-display); font-size: 20px; }
+.sents .k { font-size: 13px; font-weight: 700; padding: 2px 8px; border-radius: 999px; }
+.k.good { background: var(--green-wash); color: var(--green); }
+.k.silly { background: var(--gold-wash); color: var(--gold); }
+.k.broken { background: var(--red-wash); color: var(--red); }
+.k.data { background: var(--blue-wash); color: var(--blue); }
+.grownups { font-size: 16px; }
+.grownups ul { margin: 0; padding-left: 20px; }
+
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top">
+    <div class="brand" id="brand"></div>
+    <div class="top-right">
+      <button class="btn alt small" type="button" id="mapBtn" hidden>🗺 Map</button>
+      <div class="teacher">
+        <label><input type="checkbox" id="teacherMode"> Teacher mode</label>
+        <select id="voiceSel" aria-label="Reading voice" hidden></select>
+      </div>
+    </div>
+  </div>
+  <div class="crumb" id="crumb" hidden></div>
+  <main id="screen" style="display:flex;flex-direction:column;gap:16px"></main>
+</div>
+
+<script src="vendor/html2canvas.min.js"></script>
+<script>
+/* ---------- data ---------- */
+const RAW = {
+  tutorial: ["I like cats", "I like dogs", "I like cats", "I see birds"],
+  play: ["I like to read","I like to sing","I like to play outside","I like apples","I like music","I walk to school","I read books","I see birds","I help my mom","I drink milk","I draw pictures","Children play with kites","Kittens play with yarn","Dogs love to play","Kids want to play games","Grandma sings with my sister","Dad cooks with my brother","Mom likes my friends","This gift is for my friends","Birds sing in trees","The sun shines brightly","Fish swim in ponds","Rain falls from clouds","Bees make sweet honey","Stars twinkle at night","Flowers grow in spring","Ducks swim in lakes","Cows eat green grass","Snow covers the ground","Leaves fall in autumn"],
+  fish: ["I ride a bike","I ride a horse","I ride a scooter","I ride trains","I ride buses","I walk to school","I eat apples","I read books","I see stars","I drink milk","I draw pictures","Cats catch a fish","Bears catch a fish","Fish swim fast","Give this fish to the cat","Take this fish to the kitchen","Rockets fly to the moon","Wolves howl at the moon","We go to bed","Birds sing sweet songs","Bees make honey","Kids love sunny days","Dogs chase balls","Cows eat green grass","Stars shine at night","Rain makes puddles","Flowers grow in gardens","Mom bakes cookies","Ducks swim in ponds","Leaves fall in autumn"],
+  spring: ["I like spring","I like spring sunshine","I like spring breeze","I like kittens","I like rainbows","I walk home","I read books","Gentle rain feeds grass","White clouds cross blue skies","Cute kittens hug owners","Warm spring brings flowers","Bright spring brings flowers","Golden sunsets paint skies","Happy classmates play games","Kind teachers open books","I see birds","I help friends","Free birds fly high","Good friends share candy","Green grass loves sunshine","Blue skies hold clouds","Cool breeze shakes leaves","Pink flowers smell sweet","Wild flowers smell sweet","I drink water","Warm water warms hands","I draw pictures","Pretty pictures cheer people","Playful kittens chase butterflies","Colorful butterflies visit flowers"]
+};
+const LIB = {}; for (const k in RAW) LIB[k] = RAW[k].map(s => s.split(" "));
+const BUG = ["I", "like", "to", "eat", "bugs"];
+const BUGS_NEEDED = 4, BUGS_MAX = 6;
+
+const FACTS = [
+  "AI picks the next word by counting.",
+  "AI learns from what people write.",
+  "AI does not understand what it says.",
+  "The more words AI looks at, the better it talks."
+];
+
+const low = w => w.toLowerCase();
+const label = w => (low(w) === "i" ? "I" : low(w));
+const plural = n => n + " time" + (n === 1 ? "" : "s");
+const esc = s => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
+
+function followers(lib, ctx) {
+  const c = ctx.map(low), n = c.length, m = new Map();
+  lib.forEach(s => {
+    const t = s.map(low);
+    for (let i = 0; i + n < t.length; i++) {
+      let ok = true;
+      for (let k = 0; k < n; k++) if (t[i + k] !== c[k]) { ok = false; break; }
+      if (ok) m.set(t[i + n], (m.get(t[i + n]) || 0) + 1);
+    }
+  });
+  return [...m.entries()].map(([k, v]) => ({ key: k, label: label(k), n: v })).sort((a, b) => b.n - a.n);
+}
+function generate(lib) {
+  const seq = ["I"];
+  for (let step = 0; step < 14; step++) {
+    const f = followers(lib, [seq[seq.length - 1]]);
+    if (!f.length || (f.length > 1 && f[0].n === f[1].n)) break;
+    seq.push(f[0].label);
+  }
+  return seq.join(" ");
+}
+const bugRows = n => Array.from({ length: n }, () => BUG.slice());
+const SENT = {
+  play: generate(LIB.play),
+  bugs: generate(bugRows(BUGS_NEEDED).concat(LIB.play)),
+  fish: generate(LIB.fish),
+  spring: generate(LIB.spring)
+};
+
+/* ---------- state ---------- */
+const KEY = "i-am-the-ai-v2";
+let S = { view: "intro", r: 0, s: 0, done: [], bugs: 0, answer: "", name: "", teacher: false, voice: "" };
+try { const s = JSON.parse(localStorage.getItem(KEY) || "null"); if (s && s.view) S = Object.assign(S, s); } catch (e) {}
+function save() { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) {} }
+
+/* ---------- voice ---------- */
+const canSpeak = "speechSynthesis" in window && typeof SpeechSynthesisUtterance !== "undefined";
+let VOICE = null;
+// Edge natural voices first, then Apple / Safari voices, then other common US female voices.
+const PREFERRED = [/Ava.*(Natural|Online)/i, /Aria.*(Natural|Online)/i, /Jenny.*(Natural|Online)/i, /Emma.*(Natural|Online)/i, /Michelle.*(Natural|Online)/i,
+  /^Samantha/i, /^Ava/i, /^Allison/i, /^Susan/i, /^Zoe/i, /Google US English/i, /Aria/i, /Jenny/i, /Zira/i];
+function voices() { try { return speechSynthesis.getVoices().filter(v => /^en/i.test(v.lang)); } catch (e) { return []; } }
+function pickVoice() {
+  const vs = voices(); if (!vs.length) return;
+  VOICE = null;
+  if (S.voice) VOICE = vs.find(v => v.name === S.voice) || null;
+  if (!VOICE) for (const re of PREFERRED) { const v = vs.find(x => re.test(x.name) && /en[-_]US/i.test(x.lang)) || vs.find(x => re.test(x.name)); if (v) { VOICE = v; break; } }
+  if (!VOICE) VOICE = vs.find(v => /en[-_]US/i.test(v.lang)) || vs[0];
+  fillVoiceSel();
+}
+function fillVoiceSel() {
+  const sel = document.getElementById("voiceSel"); if (!sel) return;
+  const vs = voices();
+  sel.innerHTML = vs.map(v => `<option value="${esc(v.name)}" ${VOICE && v.name === VOICE.name ? "selected" : ""}>🔊 ${esc(v.name)}</option>`).join("");
+}
+if (canSpeak) { pickVoice(); try { speechSynthesis.addEventListener("voiceschanged", pickVoice); } catch (e) { speechSynthesis.onvoiceschanged = pickVoice; } }
+function speak(t) {
+  try {
+    speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(t);
+    if (VOICE) { u.voice = VOICE; u.lang = VOICE.lang; } else u.lang = "en-US";
+    u.rate = 0.92; u.pitch = 1.08;
+    speechSynthesis.speak(u);
+  } catch (e) {}
+}
+const plain = h => h.replace(/<[^>]+>/g, " ").replace(/[“”]/g, '"').replace(/\s+/g, " ").trim();
+function sayBtn(text) { return canSpeak ? `<button class="say" type="button" data-say="${encodeURIComponent(plain(text))}" aria-label="Read aloud">🔊</button>` : ""; }
+function listenBtn(text, lbl = "🔊 Listen") { return canSpeak ? `<button class="btn alt small" type="button" data-say="${encodeURIComponent(text)}">${lbl}</button>` : ""; }
+document.addEventListener("click", e => { const b = e.target.closest("[data-say]"); if (b) speak(decodeURIComponent(b.dataset.say)); });
+
+/* ---------- helpers ---------- */
+const ROBOT = (eyes = "") => `<svg viewBox="0 0 64 64" aria-hidden="true"><line x1="32" y1="5" x2="32" y2="15" stroke="var(--ink)" stroke-width="3" stroke-linecap="round"/><circle cx="32" cy="6" r="4.5" fill="var(--red)"/><rect x="7" y="15" width="50" height="41" rx="13" fill="var(--blue)" stroke="var(--ink)" stroke-width="2.5"/><rect x="14" y="23" width="36" height="20" rx="8" fill="var(--sheet)"/>${eyes || `<circle cx="25" cy="33" r="4" fill="var(--ink)"/><circle cx="39" cy="33" r="4" fill="var(--ink)"/>`}<rect x="24" y="47.5" width="16" height="3" rx="1.5" fill="var(--sheet)"/><rect x="2" y="29" width="5" height="12" rx="2.5" fill="var(--ink)"/><rect x="57" y="29" width="5" height="12" rx="2.5" fill="var(--ink)"/></svg>`;
+const HAPPY = `<path d="M21 34 q4 -6 8 0" stroke="var(--ink)" stroke-width="3" fill="none" stroke-linecap="round"/><path d="M35 34 q4 -6 8 0" stroke="var(--ink)" stroke-width="3" fill="none" stroke-linecap="round"/>`;
+function bot(html, happy) { return `<div class="bot">${ROBOT(happy ? HAPPY : "")}<div class="bubble">${html}${sayBtn(html)}</div></div>`; }
+function isLast() { return S.s === ROUNDS[S.r].screens.length - 1; }
+function navRow(nextLabel, disabled = false) {
+  const lbl = nextLabel && isLast() ? "Back to the map 🗺" : nextLabel;
+  return `<div class="nav"><button class="back" type="button" id="back">← Back</button>${lbl ? `<button class="btn" type="button" id="next" ${disabled ? "disabled" : ""}>${lbl}</button>` : ""}</div>`;
+}
+function wireNav(el) {
+  const b = el.querySelector("#back"); if (b) b.onclick = prevStep;
+  const n = el.querySelector("#next"); if (n) n.onclick = nextStep;
+}
+
+/* library list: newCount rows at the top are added data */
+function libHTML(rows, newCount, ctx, fresh) {
+  const n = ctx ? ctx.length : 0, cl = ctx ? ctx.map(low) : [];
+  const items = rows.map((s, si) => {
+    const marks = new Array(s.length).fill("");
+    let hit = false;
+    if (ctx) {
+      const t = s.map(low);
+      for (let i = 0; i + n < t.length; i++) {
+        let ok = true; for (let k = 0; k < n; k++) if (t[i + k] !== cl[k]) { ok = false; break; }
+        if (ok) { for (let k = 0; k < n; k++) marks[i + k] = "prev"; marks[i + n] = "next"; hit = true; }
+      }
+    }
+    const isNew = si < newCount;
+    const words = s.map((w, i) => `<span class="w ${marks[i]}" ${marks[i] === "next" ? `data-k="${low(w)}"` : ""}>${w}</span>`).join("");
+    const cls = [ctx && !hit ? "miss" : "", isNew ? "added" : "", isNew && fresh && si === 0 ? "fresh" : ""].join(" ");
+    return `<li class="${cls}"><span class="num">${isNew ? "NEW" : si - newCount + 1}</span><span class="words">${words}</span></li>`;
+  }).join("");
+  return `<ol class="lib ${ctx ? "filtering" : ""}">${items}</ol>`;
+}
+
+/* ---------- game component ---------- */
+function game(el, o) {
+  const n = o.n || 1;
+  const lib = typeof o.lib === "function" ? o.lib() : o.lib;
+  const newCount = o.newCount ? o.newCount() : 0;
+  const g = { seq: (o.start || ["I"]).slice(), active: false, wrong: 0, reveal: false, msg: "", kind: "", tried: new Set(), popped: false };
+  g.done = followers(lib, g.seq.slice(-n)).length === 0;
+  const ctx = () => g.seq.slice(-n);
+  function render() {
+    const c = ctx(), cText = c.join(" ");
+    const f = g.done ? [] : followers(lib, c);
+    const max = f.length ? f[0].n : 0;
+    const showN = S.teacher || g.reveal;
+    let strip = g.seq.map((t, i) => `<span class="tok ${g.active && i >= g.seq.length - n ? "ctx" : ""} ${g.popped && i === g.seq.length - 1 ? "pop" : ""}">${t}</span>`).join("");
+    strip += g.done ? `<span class="end">.</span>` : `<button type="button" class="slot ${g.active ? "on" : ""}" id="slot" aria-label="Find the next word after ${cText}">?</button>`;
+    let hint, kind = g.kind;
+    if (g.done) { hint = `${g.msg ? g.msg + " " : ""}No word ever comes after “<b>${c[c.length - 1]}</b>”, so the sentence is finished!`; kind = "good"; }
+    else if (!g.active) hint = g.msg ? `${g.msg} Now tap the next <b>?</b>` : `Tap the <b>?</b> to see what people said after “<b>${cText}</b>”.`;
+    else hint = g.msg || `Look at the <b>red</b> words. Which word comes after “<b>${cText}</b>” the most? Count, then tap it.`;
+    const cands = g.active ? [...f].sort((a, b) => a.label.localeCompare(b.label)).map(x => {
+      const top = showN && x.n === max;
+      return `<button type="button" class="cand ${top ? "top" : ""} ${g.tried.has(x.key) ? "no" : ""}" data-k="${x.key}"><span>${x.label}</span>${showN ? `<span class="n">${x.n}</span>` : ""}</button>`;
+    }).join("") : "";
+    el.innerHTML = `
+      ${bot(o.bubble)}
+      <section class="panel">
+        <p class="eyebrow">${o.title}</p>
+        <div class="strip">${strip}</div>
+        <p class="hint ${kind}" aria-live="polite">${hint}</p>
+        ${g.active ? `<div class="cands">${cands}</div>` : ""}
+        ${g.done ? `<div class="result"><span>The AI says:</span><span class="big">${g.seq.join(" ")}.</span>${listenBtn(g.seq.join(" "))}</div>` : ""}
+      </section>
+      <section class="panel">
+        <div class="lib-head"><h3>What people said <span class="eyebrow" style="display:inline">· ${lib.length} sentences</span></h3><div class="legend">${newCount ? `<span><i class="lg-new"></i>new</span>` : ""}<span><i class="lg-prev"></i>the AI looks here</span><span><i class="lg-next"></i>the next word</span></div></div>
+        ${libHTML(lib, newCount, g.active ? c : null)}
+      </section>
+      ${navRow(g.done ? (o.nextLabel || "Next →") : "")}`;
+    wireNav(el);
+    g.popped = false;
+    const slot = el.querySelector("#slot");
+    if (slot) slot.onclick = () => { g.active = !g.active; g.msg = ""; g.kind = ""; render(); };
+    el.querySelectorAll(".cand").forEach(b => {
+      const k = b.dataset.k;
+      b.onmouseenter = () => el.querySelectorAll(`.w.next[data-k="${k}"]`).forEach(w => w.classList.add("focus"));
+      b.onmouseleave = () => el.querySelectorAll(".w.focus").forEach(w => w.classList.remove("focus"));
+      b.onclick = () => pick(k);
+    });
+  }
+  function pick(k) {
+    const f = followers(lib, ctx()), max = f[0].n, x = f.find(y => y.key === k);
+    const tops = f.filter(y => y.n === max);
+    if (x.n === max) {
+      g.msg = tops.length > 1 ? `All of these came ${plural(max)}. Any one is OK!` : `Yes! “<b>${x.label}</b>” came ${plural(max)}.`;
+      g.kind = "good"; g.seq.push(x.label); g.active = false; g.wrong = 0; g.reveal = false; g.tried = new Set(); g.popped = true;
+      g.done = followers(lib, ctx()).length === 0;
+      if (g.done && o.onDone) o.onDone(g.seq.join(" "));
+    } else {
+      g.wrong++; g.tried.add(k); g.kind = "try";
+      if (g.wrong >= (o.revealAfter || 2)) { g.reveal = true; g.msg = `Here are the numbers. “<b>${x.label}</b>” came only ${plural(x.n)}. Which word came more?`; }
+      else g.msg = `Hmm, not quite. Count the <b>red</b> words again!`;
+    }
+    render();
+  }
+  render();
+}
+
+/* ---------- question component ---------- */
+function question(el, q) {
+  let solved = false, chosen = new Set();
+  function render() {
+    el.innerHTML = `
+      ${bot(`<p><span class="qnum">Q${q.num}.</span> ${q.prompt}</p>`)}
+      <section class="panel">
+        ${q.quote ? `<div class="quote">${q.quote}</div>` : ""}
+        ${q.show ? q.show() : ""}
+        <div class="opts">${q.options.map((op, i) => {
+          const st = chosen.has(i) ? (op.ok ? "yes" : "no") : "";
+          return `<button type="button" class="opt ${st}" data-i="${i}" ${solved ? "disabled" : ""}><span class="letter">${"ABC"[i]}</span><span>${op.t}</span></button>`;
+        }).join("")}</div>
+        <div id="fbArea"></div>
+      </section>
+      ${navRow(solved ? "Next →" : "")}`;
+    wireNav(el);
+    el.querySelectorAll(".opt").forEach(b => b.onclick = () => {
+      const i = +b.dataset.i, op = q.options[i];
+      chosen.add(i);
+      if (op.ok) solved = true;
+      render();
+      const fb = el.querySelector("#fbArea");
+      fb.innerHTML = `<p class="fb ${op.ok ? "good" : "try"}">${op.fb}</p>`;
+      if (op.ok && q.after) q.after(fb);
+    });
+  }
+  render();
+}
+
+/* ---------- other screens ---------- */
+function predict(el, o) {
+  el.innerHTML = `${bot(o.bubble)}
+    <section class="panel"><div class="opts">${o.options.map((t, i) => `<button type="button" class="opt" data-i="${i}"><span class="letter">${"ABC"[i]}</span><span>${t}</span></button>`).join("")}</div><div id="fbArea"></div></section>
+    ${navRow("")}`;
+  wireNav(el);
+  el.querySelectorAll(".opt").forEach(b => b.onclick = () => {
+    if (o.onPick) o.onPick();
+    el.querySelectorAll(".opt").forEach(x => { x.disabled = true; x.classList.toggle("yes", x === b); });
+    el.querySelector("#fbArea").innerHTML = `<p class="fb good">Good guess! Let's find out.</p>`;
+    el.querySelector(".nav").outerHTML = navRow(o.go || "Let's play →");
+    wireNav(el);
+  });
+}
+function factCard(el, idx, line) {
+  el.innerHTML = `${bot(`<p>${line}</p><p>You got a new card!</p>`, true)}
+    <section class="panel" style="align-items:center;padding-block:32px">
+      <div class="fact"><span class="tag">AI Fact card · ${idx + 1} of 4</span><span class="txt">${FACTS[idx]}</span>${ROBOT(HAPPY)}</div>
+      ${listenBtn(FACTS[idx], "🔊 Read my card")}
+    </section>
+    ${navRow("Next →")}`;
+  wireNav(el);
+}
+
+/* Round 2: add new sentences to the top of the data */
+function pollute(el) {
+  let fresh = false;
+  function rows() { return bugRows(S.bugs).concat(LIB.play); }
+  function render() {
+    const L = rows();
+    const m = new Map(followers(L, ["to"]).map(x => [x.key, x.n]));
+    const order = ["play", "read", "sing", "school", "eat"];
+    const play = m.get("play") || 0, eat = m.get("eat") || 0;
+    const bars = order.map(k => {
+      const v = m.get(k) || 0;
+      const top = v === Math.max(...order.map(x => m.get(x) || 0)) && order.filter(x => (m.get(x) || 0) === v).length === 1;
+      return `<span class="chip ${k === "eat" ? "newword" : ""} ${top ? "top" : ""}">${top ? "👑 " : ""}${k} <b>${v}</b></span>`;
+    }).join("");
+    let msg, happy = false;
+    if (S.bugs === 0) msg = `<p>Oh no! Someone wants to add <b>“I like to eat bugs”</b> to the AI's data. Tap <b>➕ Add</b> and watch the top of the list!</p>`;
+    else if (eat < play) msg = `<p>See the new sentence at the top? Now “eat” comes after “to” ${plural(eat)}. “play” still has ${play}. Add more!</p>`;
+    else if (eat === play) msg = `<p>It's a tie! “eat” ${eat}, “play” ${play}. Add one more!</p>`;
+    else { msg = `<p>Now “eat” comes after “to” more than “play”! The AI's data has changed. Let's play the AI again.</p>`; happy = true; }
+    el.innerHTML = `<div aria-live="polite">${bot(msg, happy)}</div>
+      <section class="panel">
+        <div class="datahead">
+          <div class="datacount"><span class="big ${S.bugs ? "grew" : ""}">${L.length}</span><span>sentences in the AI's data</span></div>
+          <div class="ex-actions">
+            <button class="btn gold" type="button" id="add" ${S.bugs >= BUGS_MAX ? "disabled" : ""}>➕ Add “I like to eat bugs”</button>
+            <button class="btn alt small" type="button" id="rem" ${S.bugs === 0 ? "disabled" : ""}>➖ Take one away</button>
+          </div>
+        </div>
+        <div class="score"><span class="eyebrow">After “to”:</span>${bars}</div>
+        <div class="legend"><span><i class="lg-new"></i>new</span><span><i class="lg-prev"></i>“to”</span><span><i class="lg-next"></i>the word after “to”</span></div>
+        ${libHTML(L, S.bugs, ["to"], fresh)}
+      </section>
+      ${navRow(eat > play ? "Play the AI again →" : "")}`;
+    wireNav(el);
+    fresh = false;
+    el.querySelector("#add").onclick = () => { S.bugs++; save(); fresh = true; render(); };
+    el.querySelector("#rem").onclick = () => { S.bugs--; save(); render(); };
+  }
+  render();
+}
+function compare(el) {
+  el.innerHTML = `${bot(`<p>Look! Same AI. Same rules. Only the <b>data</b> changed.</p>`)}
+    <section class="panel">
+      <div class="compare">
+        <div class="before"><span class="eyebrow">Before · 30 sentences</span><span class="big">${SENT.play}.</span></div>
+        <div class="after"><span class="eyebrow">After · ${30 + S.bugs} sentences (${S.bugs} new)</span><span class="big">${SENT.bugs}.</span></div>
+      </div>
+    </section>
+    ${navRow("Next →")}`;
+  wireNav(el);
+}
+
+function fillIn(el) {
+  const opts = ["thinking", "guessing", "dreaming"];
+  let done = false;
+  function render(pickWord, ok) {
+    el.innerHTML = `${bot(`<p>Tap a word to fill in the blank.</p>`)}
+      <section class="panel" style="gap:18px">
+        <div class="fill">AI talks by <span class="blank ${ok ? "ok" : ""}">${pickWord || "&nbsp;"}</span> the next word.</div>
+        <div class="cands">${opts.map(w => `<button type="button" class="cand" data-w="${w}" ${done ? "disabled" : ""}>${w}</button>`).join("")}</div>
+        ${pickWord ? `<p class="fb ${ok ? "good" : "try"}">${ok ? "Yes! AI looks at the words before, and <b>guesses</b> the next word. Then it does it again, and again." : `Hmm. Is the AI really ${pickWord}? Remember: it only counts. Try another word!`}</p>` : ""}
+      </section>
+      ${navRow(done ? "Next →" : "")}`;
+    wireNav(el);
+    el.querySelectorAll(".cand").forEach(b => b.onclick = () => { const w = b.dataset.w, ok = w === "guessing"; if (ok) done = true; render(w, ok); });
+  }
+  render();
+}
+
+function openQ(el) {
+  let shown = false;
+  const words = t => t.trim().split(/\s+/).filter(Boolean).length;
+  function render() {
+    el.innerHTML = `${bot(`<p>Now use your own words!</p><p><b>How does AI make a sentence?</b> Write one or two sentences.</p>`)}
+      <section class="panel">
+        <label for="answer" class="eyebrow">My answer</label>
+        <textarea id="answer" placeholder="AI makes a sentence by…">${esc(S.answer)}</textarea>
+        ${shown ? "" : `<div><button class="btn" type="button" id="show" ${words(S.answer) < 3 ? "disabled" : ""}>Show a sample answer</button> <span class="eyebrow" id="need" style="margin-left:8px">${words(S.answer) < 3 ? "Write at least 3 words first" : ""}</span></div>`}
+        ${shown ? `<div class="sample"><p class="eyebrow" style="margin-bottom:6px">Sample answer</p><p>AI reads lots of sentences that people wrote. It looks at the words before, counts which word comes next most often, and guesses the next word. It does not really understand what it says.</p></div>
+        <h3>Did your answer say…</h3>
+        <ul class="checks">
+          <li><label><input type="checkbox" id="c1"> AI learns from what people wrote?</label></li>
+          <li><label><input type="checkbox" id="c2"> AI guesses the next word?</label></li>
+          <li><label><input type="checkbox" id="c3"> AI does not really understand?</label></li>
+        </ul>
+        <p class="fb good">It's OK if you missed one. Now you know all three!</p>` : ""}
+      </section>
+      ${navRow(shown ? "Get my certificate →" : "")}`;
+    wireNav(el);
+    const ta = el.querySelector("#answer");
+    ta.oninput = () => {
+      S.answer = ta.value; save();
+      const b = el.querySelector("#show"), need = el.querySelector("#need");
+      if (b) { const ok = words(ta.value) >= 3; b.disabled = !ok; need.textContent = ok ? "" : "Write at least 3 words first"; }
+    };
+    const b = el.querySelector("#show"); if (b) b.onclick = () => { shown = true; render(); };
+  }
+  render();
+}
+
+function certificate(el) {
+  el.innerHTML = `${bot(`<p>You were the AI today! Now you know how AI talks.</p>`, true)}
+    <section class="cert">
+      <p class="eyebrow">Certificate</p>
+      <h2>I Know How AI Talks</h2>
+      <div class="no-shot" style="width:min(100%,360px)"><label class="eyebrow" for="kidName">Your name</label><input type="text" id="kidName" placeholder="Write your name" value="${esc(S.name)}"></div>
+      <div class="name" id="nameOut">${esc(S.name)}</div>
+      <div class="cards">${FACTS.map((f, i) => `<div class="mini"><span>AI Fact ${i + 1}</span>${f}</div>`).join("")}</div>
+      <div class="sents">
+        <p class="eyebrow" style="margin:0">Sentences you made as the AI</p>
+        <div><b>${SENT.play}.</b><span class="k good">Round 1 · Good sentence</span></div>
+        <div><b>${SENT.bugs}.</b><span class="k data">Round 2 · New data, new sentence</span></div>
+        <div><b>${SENT.fish}.</b><span class="k silly">Round 3 · Good grammar, silly meaning</span></div>
+        <div><b>${SENT.spring}.</b><span class="k broken">Round 4 · Broken grammar</span></div>
+      </div>
+      ${S.answer.trim() ? `<div class="sents"><p class="eyebrow" style="margin:0">In my own words</p><div>${esc(S.answer)}</div></div>` : ""}
+      <p class="eyebrow">I Am the AI · ${new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })}</p>
+    </section>
+    <section class="panel" style="align-items:flex-start">
+      <button class="btn" type="button" id="saveCert" hidden>📷 Save my certificate</button>
+      <p class="hint" id="saveMsg" style="margin:0">Want to keep your certificate? Ask a grown-up to take a screenshot.</p>
+    </section>
+    <section class="panel grownups">
+      <h3>For grown-ups</h3>
+      <p style="margin:0">Your child played a “bigram” language model: an AI that picks the next word by counting which word most often came after the last one. Real chatbots work on the same idea, predicting the next word, but they look at many more words and learn from far more text.</p>
+      <p style="margin:0"><b>Questions to talk about together:</b></p>
+      <ul>
+        <li>Can an AI say something wrong? How would we know?</li>
+        <li>If an AI learns from what people write, what should people be careful about?</li>
+      </ul>
+    </section>
+    <div class="nav"><button class="back" type="button" id="back">← Back</button><span style="display:flex;gap:10px;flex-wrap:wrap"><button class="btn alt" type="button" id="again">Play again from the start</button><button class="btn" type="button" id="next">Back to the map 🗺</button></span></div>`;
+  wireNav(el);
+  const inp = el.querySelector("#kidName");
+  inp.oninput = () => { S.name = inp.value; save(); el.querySelector("#nameOut").textContent = inp.value; };
+  const saveBtn = el.querySelector("#saveCert"), saveMsg = el.querySelector("#saveMsg");
+  getDownloads().then(dl => {
+    if (!dl || !window.html2canvas || !el.contains(saveBtn)) return;
+    saveBtn.hidden = false;
+    saveMsg.textContent = "Save your certificate as a picture.";
+    saveBtn.onclick = async () => {
+      saveBtn.disabled = true; saveMsg.className = "hint"; saveMsg.textContent = "Making your picture…";
+      try {
+        const cert = el.querySelector(".cert");
+        const canvas = await html2canvas(cert, { scale: 2, backgroundColor: getComputedStyle(cert).backgroundColor,
+          ignoreElements: n => n.classList && n.classList.contains("no-shot") });
+        const blob = await new Promise(r => canvas.toBlob(r, "image/png"));
+        const who = (S.name || "").trim().replace(/[^A-Za-z0-9]+/g, "-").replace(/^-|-$/g, "");
+        await dl.save({ filename: `AI-certificate${who ? "-" + who : ""}.png`, data: blob });
+        saveMsg.className = "hint good"; saveMsg.textContent = "Saved! 🎉";
+      } catch (e) {
+        saveMsg.className = "hint try";
+        saveMsg.textContent = e && e.code === "declined" ? "Not saved. You can tap the button again any time."
+          : e && e.code === "rate_limited" ? "Please wait a moment, then try again."
+          : "Saving didn't work here. Ask a grown-up to take a screenshot instead.";
+      }
+      saveBtn.disabled = false;
+    };
+  });
+  el.querySelector("#again").onclick =() => { S = Object.assign(S, { view: "intro", r: 0, s: 0, done: [], bugs: 0, answer: "", name: "" }); save(); show(); };
+}
+
+let dlPromise = null;
+function getDownloads() {
+  if (!dlPromise) {
+    // Inside claude.ai: the platform's save prompt. On a normal website: a plain browser download.
+    const browserSaver = { save: ({ filename, data }) => new Promise(res => {
+      const url = URL.createObjectURL(data instanceof Blob ? data : new Blob([data]));
+      const a = document.createElement("a"); a.href = url; a.download = filename;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 2000); res({ status: "saved" });
+    }) };
+    try { dlPromise = window.claude && window.claude.use ? window.claude.use("downloads").catch(() => null) : Promise.resolve(browserSaver); }
+    catch (e) { dlPromise = Promise.resolve(null); }
+    dlPromise.then(d => { if (!d) dlPromise = null; });
+  }
+  return dlPromise;
+}
+
+/* ---------- rounds ---------- */
+const ROUNDS = [
+  { id: "practice", badge: "★", name: "Practice", sub: "Learn the rules", screens: [
+    el => {
+      el.innerHTML = `${bot(`<p>Here are the rules. An AI follows them every time!</p>`)}
+        <ol class="rules">
+          <li><span class="k">1</span><span>Read what <b>people said</b>.</span></li>
+          <li><span class="k">2</span><span>Start with the word <b>“I”</b>.</span></li>
+          <li><span class="k">3</span><span>Look at the <mark>last word</mark> only.</span></li>
+          <li><span class="k">4</span><span>Find the word that comes next <mark>most often</mark>.</span></li>
+        </ol>
+        ${navRow("Let's practice →")}`;
+      wireNav(el);
+    },
+    el => game(el, { lib: LIB.tutorial, title: "Practice", revealAfter: 2,
+      bubble: `<p>Let's practice with just 4 sentences. Start with “I”. Tap the red <b>?</b> box.</p>` })
+  ]},
+  { id: "r1", badge: "1", name: "Round 1", sub: "Build a sentence", fact: 0, screens: [
+    el => game(el, { lib: LIB.play, title: "Round 1", revealAfter: 2,
+      bubble: `<p><b>Round 1!</b> Here are 30 sentences people said. Build the AI's sentence one word at a time.</p>` }),
+    el => question(el, { num: 1, prompt: "How did you pick each word?", options: [
+      { t: "I picked words I like.", fb: "Hmm. Did you pick “to” because you liked it, or because it came 3 times? Try again!" },
+      { t: "I picked the word that came most often.", ok: true, fb: "Yes! AI does not like or dislike words. It just counts." }] }),
+    el => question(el, { num: 2, prompt: "Is this sentence one of the 30 sentences?", quote: SENT.play + ".", options: [
+      { t: "Yes, it is there.", fb: "Look again! Can you find all of these words in one sentence? Try again!" },
+      { t: "No, it is not there.", ok: true, fb: "Right! The AI never saw this sentence. It put small pieces together to make a <b>new</b> one. Look:" }],
+      after: fb => {
+        const seq = SENT.play.split(" ");
+        const rows = seq.slice(1).map((w, i) => {
+          const a = low(seq[i]), b = low(w), nums = [];
+          LIB.play.forEach((s, si) => { const t = s.map(low); for (let k = 0; k + 1 < t.length; k++) if (t[k] === a && t[k + 1] === b) { nums.push(si + 1); break; } });
+          return `<div class="piece" style="animation-delay:${i * 0.25}s"><span class="pair">${seq[i]} ${w}</span><span class="src">from sentence${nums.length > 1 ? "s" : ""} ${nums.join(", ")}</span></div>`;
+        }).join("");
+        fb.insertAdjacentHTML("beforeend", `<div class="pieces" style="margin-top:12px">${rows}</div>`);
+      } }),
+    el => factCard(el, 0, "Great job in Round 1!")
+  ]},
+  { id: "r2", badge: "2", name: "Round 2", sub: "Change the AI's data", fact: 1, screens: [
+    el => predict(el, { bubble: `<p><b>Round 2!</b> We use the <b>same 30 sentences</b> from Round 1. The AI said “${SENT.play}.”</p><p>What if someone adds lots of “I like to eat bugs” to the data? What will the AI say?</p>`,
+      options: ["“I like to play with my friends”", "“I like to eat bugs”", "🤔 I'm not sure"], go: "Let's try it →", onPick: () => { S.bugs = 0; save(); } }),
+    el => pollute(el),
+    el => game(el, { lib: () => bugRows(S.bugs).concat(LIB.play), newCount: () => S.bugs, title: "Round 2 · Play the AI again", revealAfter: 1,
+      bubble: `<p>This is the AI's data now. Your new sentences are at the <b>top</b>. Play the AI again with the same rules!</p>` }),
+    el => compare(el),
+    el => question(el, { num: 3, prompt: "Why did the AI change its sentence?", options: [
+      { t: "We changed what the AI read.", ok: true, fb: "Yes! The AI learns from what people write. Change the data, and you change the AI!" },
+      { t: "The AI changed its mind.", fb: "The AI does not have a mind to change. What did YOU change? Try again!" }] }),
+    el => question(el, { num: 4, prompt: "What if someone gives the AI wrong or mean sentences?", options: [
+      { t: "The AI will say wrong or mean things too.", ok: true, fb: "Right. The AI copies what it reads. That's why people must be careful about what AI learns from." },
+      { t: "The AI will know they are wrong.", fb: "Did the AI know “eat bugs” was strange? It just counted. Try again!" }] }),
+    el => factCard(el, 1, "You changed the AI!")
+  ]},
+  { id: "r3", badge: "3", name: "Round 3", sub: "A silly sentence", fact: 2, screens: [
+    el => predict(el, { bubble: `<p><b>Round 3!</b> Here are 30 new sentences. Will the AI make a sentence that makes sense?</p>`, options: ["👍 Yes", "👎 No", "🤔 I'm not sure"] }),
+    el => game(el, { lib: LIB.fish, title: "Round 3", revealAfter: 1,
+      bubble: `<p>New sentences! Same rules: look at the last word and count.</p>` }),
+    el => question(el, { num: 5, prompt: "Read the AI's sentence. Can people really do this?", quote: SENT.fish + ".", options: [
+      { t: "Yes", fb: "Can you ride a fish? Can a fish go to the moon? Try again!" },
+      { t: "No, it's silly!", ok: true, fb: "Ha! It's silly. But the grammar is fine. Every word is in the right place." }] }),
+    el => question(el, { num: 6, prompt: "Did the AI know the sentence was silly?", options: [
+      { t: "Yes, the AI knew.", fb: "Think about what the AI did. It only counted words. Try again!" },
+      { t: "No, the AI did not know.", ok: true, fb: "Right. The AI only counts words. It does not know what a fish is, or what the moon is." }] }),
+    el => question(el, { num: 7, prompt: "Does the AI have feelings or its own ideas?", options: [
+      { t: "Yes", fb: "When you played the AI, did you use your feelings? Or did you just count? Try again!" },
+      { t: "No", ok: true, fb: "Right. The AI does not think or feel. It counts and guesses." }] }),
+    el => factCard(el, 2, "You found out something big!")
+  ]},
+  { id: "r4", badge: "4", name: "Round 4", sub: "Upgrade the AI", fact: 3, screens: [
+    el => game(el, { lib: LIB.spring, title: "Round 4", revealAfter: 1,
+      bubble: `<p><b>Round 4!</b> 30 more sentences. Build the sentence, then <b>listen</b> to it.</p>` }),
+    el => question(el, { num: 8, prompt: "Listen to the AI's sentence. Is it good English?", quote: SENT.spring + ".", options: [
+      { t: "Yes", fb: "Read it out loud slowly. Does it sound right? Try again!" },
+      { t: "No, it sounds wrong.", ok: true, fb: "Right! It sounds broken. Even the grammar is wrong this time." }] }),
+    el => question(el, { num: 9, prompt: "Why did this happen?", options: [
+      { t: "The AI only looks at ONE word.", ok: true, fb: "Yes! The AI only looks at the last word. It forgets all the words before it." },
+      { t: "The AI is tired.", fb: "AI does not get tired! Think about the rules. Try again!" },
+      { t: "The AI wants to be funny.", fb: "AI does not want anything. Think about the rules. Try again!" }] }),
+    el => game(el, { lib: LIB.spring, title: "Upgrade: look at 2 words", n: 2, start: ["I", "like", "spring"], revealAfter: 1,
+      onDone: s => { S.upgrade = s; save(); },
+      bubble: `<p><b>Upgrade time!</b> Now the AI can look at the last <b>2</b> words. We start from “I like spring”. Tap the <b>?</b></p>` }),
+    el => question(el, { num: 10, prompt: "Read both sentences out loud. When the AI looked at 2 words, was the sentence better?",
+      show: () => {
+        const up = S.upgrade || "I like spring sunshine";
+        return `<div class="compare">
+          <div class="after"><span class="eyebrow">AI looks at 1 word</span><span class="big">${SENT.spring}.</span>${listenBtn(SENT.spring)}</div>
+          <div class="before"><span class="eyebrow">AI looks at 2 words</span><span class="big">${up}.</span>${listenBtn(up)}</div>
+        </div>`;
+      },
+      options: [
+      { t: "Yes!", ok: true, fb: "Yes! Real AI can look at LOTS of words, not just 2. That's why it sounds so smart." },
+      { t: "No", fb: "Tap 🔊 and listen to both sentences. Which one sounds better? Try again!" }] }),
+    el => factCard(el, 3, "You upgraded the AI!")
+  ]},
+  { id: "finish", badge: "🏆", name: "Finish", sub: "Get your certificate", screens: [
+    el => fillIn(el),
+    el => openQ(el),
+    el => certificate(el)
+  ]}
+];
+
+/* ---------- map ---------- */
+function unlocked(i) { return S.teacher || i === 0 || S.done.includes(ROUNDS[i - 1].id); }
+function mapScreen(el) {
+  const nextIdx = ROUNDS.findIndex(r => !S.done.includes(r.id));
+  const got = ROUNDS.filter(r => r.fact !== undefined && S.done.includes(r.id)).length;
+  let line;
+  if (!S.done.length) line = `<p>This is the game map. Start with <b>Practice</b>!</p>`;
+  else if (nextIdx === -1) line = `<p>You finished everything! You can play any round again.</p>`;
+  else line = `<p>Great job! Next up: <b>${ROUNDS[nextIdx].name}</b>.</p>`;
+  el.innerHTML = `${bot(line, S.done.length > 0)}
+    <section class="panel">
+      <div class="cardcount"><span class="eyebrow">AI Fact cards</span><span class="slots">${[0, 1, 2, 3].map(i => `<i class="${i < got ? "got" : ""}"></i>`).join("")}</span><span>${got} of 4</span></div>
+      <ol class="map">${ROUNDS.map((r, i) => {
+        const done = S.done.includes(r.id), open = unlocked(i), isNext = i === nextIdx && open;
+        const btn = !open ? `<button class="btn alt small" type="button" disabled>🔒 Locked</button>`
+          : `<button class="btn ${done ? "alt" : ""} small" type="button" data-r="${i}">${done ? "Play again" : "Play ▶"}</button>`;
+        return `<li class="lvl ${done ? "done" : ""} ${!open ? "locked" : ""} ${isNext ? "next" : ""}">
+          <span class="badge">${done ? "✓" : r.badge}</span>
+          <div class="info"><div class="row"><div><span class="eyebrow">${r.name}</span><br><b>${r.sub}</b></div>${btn}</div>
+          ${done && r.fact !== undefined ? `<span class="got">🃏 ${FACTS[r.fact]}</span>` : ""}</div></li>`;
+      }).join("")}</ol>
+    </section>`;
+  el.querySelectorAll("[data-r]").forEach(b => b.onclick = () => openRound(+b.dataset.r));
+}
+
+/* ---------- shell ---------- */
+const screen = document.getElementById("screen");
+const crumb = document.getElementById("crumb");
+const mapBtn = document.getElementById("mapBtn");
+const tm = document.getElementById("teacherMode");
+const voiceSel = document.getElementById("voiceSel");
+document.getElementById("brand").innerHTML = ROBOT() + "I Am the AI";
+tm.checked = !!S.teacher;
+voiceSel.hidden = !S.teacher || !canSpeak;
+tm.onchange = () => { S.teacher = tm.checked; voiceSel.hidden = !tm.checked || !canSpeak; save(); show(true); };
+voiceSel.onchange = () => { S.voice = voiceSel.value; save(); pickVoice(); speak("Hi! Today, you are the AI."); };
+mapBtn.onclick = () => { S.view = "map"; show(); };
+
+function openRound(i) { S.view = "play"; S.r = i; S.s = 0; show(); }
+function nextStep() {
+  const R = ROUNDS[S.r];
+  if (S.s + 1 < R.screens.length) S.s++;
+  else { if (!S.done.includes(R.id)) S.done.push(R.id); S.view = "map"; }
+  show();
+}
+function prevStep() { if (S.s > 0) S.s--; else S.view = "map"; show(); }
+
+function show(keepScroll) {
+  try { speechSynthesis.cancel(); } catch (e) {}
+  save();
+  mapBtn.hidden = S.view !== "play";
+  crumb.hidden = S.view !== "play";
+  if (S.view === "intro") {
+    screen.innerHTML = `<section class="panel hero">${ROBOT(HAPPY)}<p class="eyebrow">A game about how AI talks</p><h1>I Am the AI</h1><p>Hi! Today, <b>you</b> are the AI. I will show you how AI makes a sentence.</p>${listenBtn("Hi! Today, you are the AI. I will show you how AI makes a sentence.")}<button class="btn" type="button" id="start">Let's start →</button></section>`;
+    screen.querySelector("#start").onclick = () => { S.view = "map"; show(); };
+  } else if (S.view === "map") {
+    mapScreen(screen);
+  } else {
+    const R = ROUNDS[S.r];
+    S.s = Math.min(S.s, R.screens.length - 1);
+    crumb.innerHTML = `<b>${R.name}</b><span>${R.sub}</span><span class="dots">${R.screens.map((_, i) => `<i class="${i < S.s ? "on" : i === S.s ? "now" : ""}"></i>`).join("")}</span><span>Step ${S.s + 1} of ${R.screens.length}</span>`;
+    R.screens[S.s](screen);
+  }
+  if (!keepScroll) window.scrollTo({ top: 0 });
+}
+show(true);
+</script>
+</body>
+</html>

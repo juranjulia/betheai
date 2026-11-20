@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: i-am-the-ai
+    runtime: static
+    buildCommand: ""
+    staticPublishPath: ./public
+    headers:
+      - path: /*
+        name: Cache-Control
+        value: no-cache
